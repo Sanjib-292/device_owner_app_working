@@ -1,32 +1,69 @@
+import 'dart:isolate';
+import 'package:device_owner_app/device_locker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/services.dart';
+import 'package:workmanager/workmanager.dart';
 
-Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp();
-  if (message.notification != null) {
-    String? command = message.notification!.body;
-    if (command != null) {
-      switch (command.toLowerCase()) {
-        case "lock":
-          try {
-            await DeviceLocker.lockDevice();
-          } catch (e) {
-            print("Failed to lock device: $e");
-          }
+const MethodChannel _channel =
+    MethodChannel('com.example.device_owner_app/device_locker');
+
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    WidgetsFlutterBinding.ensureInitialized();
+    await Firebase.initializeApp();
+
+    final MethodChannel _channel =
+        MethodChannel('com.example.device_owner_app/device_locker');
+
+    final action = inputData?['action'] as String?;
+    final pin = inputData?['pin'] as String?;
+    print('Bg lockDevice called in isolate: ${Isolate.current.debugName}');
+    try {
+      switch (action) {
+        case 'lock':
+          await _channel.invokeMethod('lockDevice', {'pin': pin});
           break;
-        case "unlock":
-          try {
-            await DeviceLocker.unlockDevice();
-          } catch (e) {
-            print("Failed to unlock device: $e");
-          }
+        case 'unlock':
+          await _channel.invokeMethod('unlockDevice');
           break;
         default:
+          print('Unknown command received: $action');
           break;
       }
+    } catch (e) {
+      print('Failed to handle device action in background: $e');
+    }
+
+    return Future.value(true);
+  });
+}
+
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+
+  if (message.notification != null) {
+    String? title = message.notification!.title;
+    String? body = message.notification!.body;
+
+    if (title != null && body != null) {
+      final command = body.toLowerCase();
+      final pin = title;
+
+      Workmanager().registerOneOffTask(
+        DateTime.now().toString(),
+        'backgroundTask',
+        inputData: {
+          'action': command,
+          'pin': pin,
+        },
+      ).then((v) {
+        print('done Background>>>>>>>>>>>');
+      }).catchError((e) {
+        print('error is $e');
+      });
     }
   }
 }
@@ -41,9 +78,17 @@ void main() async {
       projectId: 'emi-lock-69a1d',
       storageBucket: 'emi-lock-69a1d.appspot.com',
     ),
-  );
-  FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(true);
+  ).then((e) {
+    print('E is $e');
+  }).catchError((er) {
+    print('er is $er');
+  });
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterError;
+  await Workmanager().initialize(
+    callbackDispatcher,
+    isInDebugMode: true,
+  );
   runApp(MaterialApp(home: DeviceOwnerApp()));
 }
 
@@ -53,65 +98,60 @@ class DeviceOwnerApp extends StatefulWidget {
 }
 
 class _DeviceOwnerAppState extends State<DeviceOwnerApp> {
-  // static const platform =
-  //     MethodChannel('com.example.device_owner_app/device_locker');
-
   @override
   void initState() {
     super.initState();
-    print('init');
     FirebaseMessaging.instance.getToken().then((token) {
-      print('FCM Token: $token');
+      print('tok $token');
     }).catchError((e) {
       FirebaseCrashlytics.instance.log("Failed to get FCM token: $e");
     });
     _configureFirebaseMessaging();
   }
 
-  void testCrash() {
-    FirebaseCrashlytics.instance.crash();
-  }
-
   void _configureFirebaseMessaging() {
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (message.notification != null) {
-        String? command = message.notification!.body;
-        if (command != null) {
-          _handleDeviceAction(command);
-        }
+        _handleDeviceAction(message.notification!.body);
       }
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       if (message.notification != null) {
-        String? command = message.notification!.body;
-        if (command != null) {
-          _handleDeviceAction(command);
-        }
+        _handleDeviceAction(message.notification!.body);
       }
     });
 
-    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    // FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
 
-  void _handleDeviceAction(String action) {
-    print('Action: $action');
-    switch (action.toLowerCase()) {
+  void _handleDeviceAction(String? action) {
+    if (action == null) return;
+
+    final splitCommand = action.split(' ');
+    final command = splitCommand[0].toLowerCase();
+    final pin = splitCommand.length > 1 ? splitCommand[1] : null;
+
+    switch (command) {
       case "lock":
-        _lockDevice();
+        if (pin != null) {
+          _lockDevice(pin);
+        } else {
+          print("PIN is required to lock the device.");
+        }
         break;
       case "unlock":
         _unlockDevice();
         break;
       default:
-        print("Unknown action received: $action");
+        print("Unknown action received: $command");
         break;
     }
   }
 
-  Future<void> _lockDevice() async {
+  Future<void> _lockDevice(String pin) async {
     try {
-      await DeviceLocker.lockDevice();
+      await DeviceLockService.lockDevice(pin);
       _showDialog("Device Locked", "Your device is now locked.");
     } catch (e) {
       print("Failed to lock device: $e");
@@ -121,7 +161,7 @@ class _DeviceOwnerAppState extends State<DeviceOwnerApp> {
 
   Future<void> _unlockDevice() async {
     try {
-      await DeviceLocker.unlockDevice();
+      await DeviceLockService.unlockDevice();
       _showDialog("Device Unlocked", "Your device is now unlocked.");
     } catch (e) {
       print("Failed to unlock device: $e");
@@ -149,10 +189,6 @@ class _DeviceOwnerAppState extends State<DeviceOwnerApp> {
     );
   }
 
-  //static FirebaseAnalytics analytics = FirebaseAnalytics.instance;
-  // static FirebaseAnalyticsObserver observer =
-  //     FirebaseAnalyticsObserver(analytics: analytics);
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -172,15 +208,13 @@ class _DeviceOwnerAppState extends State<DeviceOwnerApp> {
               const SizedBox(height: 20.0),
               ElevatedButton(
                 onPressed: () {
-                  _lockDevice();
+                  _lockDevice('123456'); // Test with a sample PIN
                 },
                 child: const Text('Lock Device'),
               ),
               const SizedBox(height: 10.0),
               ElevatedButton(
-                onPressed: () {
-                  _unlockDevice();
-                },
+                onPressed: _unlockDevice,
                 child: const Text('Unlock Device'),
               ),
             ],
@@ -191,13 +225,16 @@ class _DeviceOwnerAppState extends State<DeviceOwnerApp> {
   }
 }
 
-class DeviceLocker {
-  static const MethodChannel _channel =
+class DeviceLockService {
+  static const platform =
       MethodChannel('com.example.device_owner_app/device_locker');
 
-  static Future<void> lockDevice() async {
+  static Future<void> lockDevice(String pin) async {
+    print(
+        'Foreground lockDevice called in isolate: ${Isolate.current.debugName}');
+
     try {
-      await _channel.invokeMethod('lockDevice', {'pin': '123455'});
+      await platform.invokeMethod('lockDevice', {'pin': pin});
     } catch (e) {
       throw Exception('Failed to lock device: $e');
     }
@@ -205,9 +242,9 @@ class DeviceLocker {
 
   static Future<void> unlockDevice() async {
     try {
-      await _channel.invokeMethod('unlockDevice');
-    } catch (e) {
-      throw Exception('Failed to unlock device: $e');
+      await platform.invokeMethod('unlockDevice');
+    } on PlatformException catch (e) {
+      print("Failed to unlock device: '${e.message}'.");
     }
   }
 }

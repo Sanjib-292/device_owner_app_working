@@ -2,6 +2,7 @@
     package="com.example.device_owner_app">
 
     <!-- Permissions -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.BIND_DEVICE_ADMIN"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES"/>
@@ -10,10 +11,19 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.TRANSMIT_IR" />
+    <uses-permission android:name="android.permission.UWB_RANGING" />
 
     <application
-        android:name="${applicationName}"
+        android:name=".MyApp"
         android:label="Device Owner App"
         android:icon="@mipmap/ic_launcher">
 
@@ -25,35 +35,18 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|density|layoutDirection|fontScale|uiMode"
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize"
-            android:exported="true"> <!-- Ensure exported if needed -->
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
 
-        <!-- Custom Lock Screen Activity -->
-        <activity
-            android:name=".CustomLockScreenActivity"
-            android:theme="@style/NormalTheme"
-            android:launchMode="singleInstance"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
-            android:screenOrientation="portrait"
-            android:exported="true"> <!-- Ensure exported if needed -->
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
         <!-- Device Admin Receiver -->
         <receiver
             android:name=".MyDeviceAdminReceiver"
-            android:label="DeviceAdmin Receiver"
-            android:description="@string/app_name"
             android:permission="android.permission.BIND_DEVICE_ADMIN"
-            android:exported="true"> <!-- Ensure exported if needed -->
+            android:exported="true">
             <meta-data
                 android:name="android.app.device_admin"
                 android:resource="@xml/device_admin_receiver" />
@@ -62,14 +55,19 @@
             </intent-filter>
         </receiver>
 
+
+        
+
         <!-- Firebase Messaging Service -->
         <service
             android:name=".MyFirebaseMessagingService"
-            android:exported="true"> <!-- Ensure exported if needed -->
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        
 
         <!-- Background Service -->
         <service
@@ -79,17 +77,9 @@
             android:foregroundServiceType="connectedDevice|dataSync"
             android:stopWithTask="false" />
 
-        <!-- Boot Receiver -->
-        <receiver
-            android:name=".BootReceiver"
-            android:enabled="true"
-            android:exported="true"> <!-- Ensure exported if needed -->
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
-
-        <!-- Flutter Embedding -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="ForegroundServiceChannel"/>
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />

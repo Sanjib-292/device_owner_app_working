@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gcm_defaultSenderId" translatable="false">1068678605011</string>
+    <string name="google_api_key" translatable="false">AIzaSyDAPACUOulh_0otE2VjP8hHIk_SdWXG5jE</string>
+    <string name="google_app_id" translatable="false">1:1068678605011:android:a9478ab75082da9e7b0c26</string>
+    <string name="google_crash_reporting_api_key" translatable="false">AIzaSyDAPACUOulh_0otE2VjP8hHIk_SdWXG5jE</string>
+    <string name="google_storage_bucket" translatable="false">emi-lock-69a1d.appspot.com</string>
+    <string name="project_id" translatable="false">emi-lock-69a1d</string>
+</resources>
