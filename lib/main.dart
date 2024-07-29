@@ -1,22 +1,16 @@
 import 'dart:isolate';
-import 'package:device_owner_app/device_locker.dart';
+
+import 'package:device_locker/device_locker.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/services.dart';
 import 'package:workmanager/workmanager.dart';
-
-const MethodChannel _channel =
-    MethodChannel('com.example.device_owner_app/device_locker');
 
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     WidgetsFlutterBinding.ensureInitialized();
     await Firebase.initializeApp();
-
-    final MethodChannel _channel =
-        MethodChannel('com.example.device_owner_app/device_locker');
 
     final action = inputData?['action'] as String?;
     final pin = inputData?['pin'] as String?;
@@ -24,10 +18,10 @@ void callbackDispatcher() {
     try {
       switch (action) {
         case 'lock':
-          await _channel.invokeMethod('lockDevice', {'pin': pin});
+          await DeviceLocker.lockDevice(pin!);
           break;
         case 'unlock':
-          await _channel.invokeMethod('unlockDevice');
+          await DeviceLocker.unlockDevice();
           break;
         default:
           print('Unknown command received: $action');
@@ -72,11 +66,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: const FirebaseOptions(
-      apiKey: 'AIzaSyDAPACUOulh_0otE2VjP8hHIk_SdWXG5jE',
-      appId: '1:1068678605011:android:a9478ab75082da9e7b0c26',
-      messagingSenderId: '1068678605011',
-      projectId: 'emi-lock-69a1d',
-      storageBucket: 'emi-lock-69a1d.appspot.com',
+      apiKey: 'your-api-key',
+      appId: 'your-app-id',
+      messagingSenderId: 'your-messaging-sender-id',
+      projectId: 'your-project-id',
+      storageBucket: 'your-storage-bucket',
     ),
   ).then((e) {
     print('E is $e');
@@ -89,6 +83,7 @@ void main() async {
     callbackDispatcher,
     isInDebugMode: true,
   );
+  await DeviceLocker.activateDeviceAdmin();
   runApp(MaterialApp(home: DeviceOwnerApp()));
 }
 
@@ -121,8 +116,6 @@ class _DeviceOwnerAppState extends State<DeviceOwnerApp> {
         _handleDeviceAction(message.notification!.body);
       }
     });
-
-    // FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   }
 
   void _handleDeviceAction(String? action) {
@@ -151,7 +144,7 @@ class _DeviceOwnerAppState extends State<DeviceOwnerApp> {
 
   Future<void> _lockDevice(String pin) async {
     try {
-      await DeviceLockService.lockDevice(pin);
+      await DeviceLocker.lockDevice(pin);
       _showDialog("Device Locked", "Your device is now locked.");
     } catch (e) {
       print("Failed to lock device: $e");
@@ -161,7 +154,7 @@ class _DeviceOwnerAppState extends State<DeviceOwnerApp> {
 
   Future<void> _unlockDevice() async {
     try {
-      await DeviceLockService.unlockDevice();
+      await DeviceLocker.unlockDevice();
       _showDialog("Device Unlocked", "Your device is now unlocked.");
     } catch (e) {
       print("Failed to unlock device: $e");
@@ -222,29 +215,5 @@ class _DeviceOwnerAppState extends State<DeviceOwnerApp> {
         ),
       ),
     );
-  }
-}
-
-class DeviceLockService {
-  static const platform =
-      MethodChannel('com.example.device_owner_app/device_locker');
-
-  static Future<void> lockDevice(String pin) async {
-    print(
-        'Foreground lockDevice called in isolate: ${Isolate.current.debugName}');
-
-    try {
-      await platform.invokeMethod('lockDevice', {'pin': pin});
-    } catch (e) {
-      throw Exception('Failed to lock device: $e');
-    }
-  }
-
-  static Future<void> unlockDevice() async {
-    try {
-      await platform.invokeMethod('unlockDevice');
-    } on PlatformException catch (e) {
-      print("Failed to unlock device: '${e.message}'.");
-    }
   }
 }
