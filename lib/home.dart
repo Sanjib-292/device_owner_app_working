@@ -133,7 +133,7 @@ class _DeviceOwnerHomeState extends State<DeviceOwnerHome> {
       _showDialog("Device Unlocked", "Your device is now unlocked.");
     } catch (e) {
       print("Failed to unlock device: $e");
-      _showDialog("Error", "Failed to unlock device.");
+      _showDialog("Error", "Failed to unlock device. $e");
     }
   }
 
