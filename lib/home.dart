@@ -24,6 +24,7 @@ class _DeviceOwnerHomeState extends State<DeviceOwnerHome> {
   final TextEditingController _totalAmtController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _downPayment = TextEditingController();
+  var imageUrl;
 
   var sellectedDuration;
   String? deviceName;
@@ -228,7 +229,7 @@ class _DeviceOwnerHomeState extends State<DeviceOwnerHome> {
 
   void _submitDetails() async {
     print(
-        'xyz  $imeiNumber $fcmToken ${_nameController.text} $deviceModel  $deviceName ${_adharController.text} $sellectedDuration ${_emiController.text} ${_totalAmtController.text}');
+        'xyz  $imeiNumber $fcmToken ${_nameController.text} $deviceModel  $deviceName ${_adharController.text} $sellectedDuration ${_emiController.text} ${_totalAmtController.text}  $userImage');
     final response = await http.post(
       Uri.parse('https://morning-rounded-care.glitch.me/api/device/register'),
       headers: <String, String>{
@@ -244,12 +245,16 @@ class _DeviceOwnerHomeState extends State<DeviceOwnerHome> {
         'totalAmount': double.parse(_totalAmtController.text),
         'adhar': _adharController.text,
         'emiDuration': sellectedDuration,
+        'imageUrl': userImage,
+        'downPay': double.parse(_downPayment.text),
+        'contactNo': double.parse(_phoneController.text)
       }),
     );
     if (response.statusCode == 201) {
       print('Device registered successfully');
       _getDeviceDetails();
     } else {
+      _showDialog('Failed', "${response.body}");
       print('Failed to register device: ${response.body}');
     }
   }

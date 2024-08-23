@@ -47,6 +47,8 @@ dependencies:
   device_info_plus:
   http:
   device_imei:
+  firebase_storage:
+  image_picker:
 
   
 
@@ -54,7 +56,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   device_locker:
-    path: /Users/abcom/device_owner_app/device_locker
+    path: /Users/asifhussain/device_owner_app_working/device_locker
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

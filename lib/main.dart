@@ -94,7 +94,7 @@ void main() async {
     callbackDispatcher,
     isInDebugMode: true,
   );
-  await DeviceLocker.activateDeviceAdmin();
+  // await DeviceLocker.activateDeviceAdmin();
   runApp(DeviceOwnerApp());
 }
 

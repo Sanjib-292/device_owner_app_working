@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
+
+var userImage;
 
 class RegistrationForm extends StatefulWidget {
   final TextEditingController nameController;
@@ -11,11 +16,12 @@ class RegistrationForm extends StatefulWidget {
   final String? deviceName;
   final String? deviceModel;
   final String? imeiNumber;
+
   final int? selectedDuration;
   final Function(int?) onDurationChanged;
   final Function() onSubmit;
 
-  const RegistrationForm({
+  RegistrationForm({
     Key? key,
     required this.nameController,
     required this.emiController,
@@ -37,6 +43,51 @@ class RegistrationForm extends StatefulWidget {
 
 class _RegistrationFormState extends State<RegistrationForm> {
   final _formKey = GlobalKey<FormState>();
+  File? _image;
+  String? _imageUrl;
+
+  Future<void> _pickImage() async {
+    final pickedFile =
+        await ImagePicker().pickImage(source: ImageSource.camera);
+    if (pickedFile != null) {
+      setState(() {
+        _image = File(pickedFile.path);
+      });
+      await _uploadImageToFirebase();
+    }
+  }
+
+  Future<void> _uploadImageToFirebase() async {
+    if (_image == null) return;
+
+    try {
+      final storageRef = FirebaseStorage.instance.ref();
+      final imagesRef = storageRef.child(
+          "avatars/${widget.nameController.text}_${DateTime.now().millisecondsSinceEpoch}.jpg");
+
+      // Upload the file to Firebase Storage
+      final uploadTask = imagesRef.putFile(
+        _image!,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+
+      // Wait until the upload is complete
+      final snapshot = await uploadTask.whenComplete(() {});
+
+      // Get the download URL of the uploaded file
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+
+      setState(() {
+        _imageUrl = downloadUrl;
+        userImage = downloadUrl;
+      });
+
+      print("Uploaded Image URL: $userImage}");
+    } catch (e) {
+      // Handle any errors that occur during upload
+      print("Failed to upload image: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,6 +100,25 @@ class _RegistrationFormState extends State<RegistrationForm> {
             'Register Device',
             style: Theme.of(context).textTheme.headlineMedium,
           ),
+          SizedBox(height: 20.0),
+          GestureDetector(
+            onTap: _pickImage,
+            child: CircleAvatar(
+              radius: 50,
+              backgroundImage: _image != null ? FileImage(_image!) : null,
+              child: _image == null
+                  ? Icon(Icons.camera_alt, size: 50, color: Colors.grey)
+                  : null,
+            ),
+          ),
+          if (_imageUrl != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                'Image uploaded successfully!',
+                style: TextStyle(color: Colors.green),
+              ),
+            ),
           SizedBox(height: 20.0),
           TextFormField(
             controller: widget.nameController,
@@ -78,11 +148,11 @@ class _RegistrationFormState extends State<RegistrationForm> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
-              prefixIcon: Icon(Icons.document_scanner),
+              prefixIcon: Icon(Icons.phone),
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter your Adhar number';
+                return 'Please enter your contact number';
               }
               return null;
             },
@@ -141,11 +211,11 @@ class _RegistrationFormState extends State<RegistrationForm> {
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
               ),
-              prefixIcon: Icon(Icons.document_scanner),
+              prefixIcon: Icon(Icons.payment),
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter your Adhar number';
+                return 'Please enter the down payment amount';
               }
               return null;
             },
@@ -177,7 +247,7 @@ class _RegistrationFormState extends State<RegistrationForm> {
           SizedBox(height: 10.0),
           DropdownButtonFormField<int>(
             decoration: InputDecoration(
-              labelText: 'Emi Duration',
+              labelText: 'EMI Duration',
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
               ),

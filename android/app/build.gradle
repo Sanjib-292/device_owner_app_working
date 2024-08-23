@@ -47,16 +47,16 @@ android {
 
     signingConfigs {
         release {
-            keyAlias 'sanjib'
+            keyAlias 'downer'
             keyPassword 'sanjib292'
-            storeFile file('/Users/abcom/my-emi-working.jks')
+            storeFile file('/Users/asifhussain/Desktop/downer.keystore')
             storePassword 'sanjib292'
         }
 
         debug {
-            keyAlias 'sanjib'
+            keyAlias 'downer'
             keyPassword 'sanjib292'
-            storeFile file('/Users/abcom/my-emi-working.jks')
+            storeFile file('/Users/asifhussain/Desktop/downer.keystore')
             storePassword 'sanjib292'
         }
     }

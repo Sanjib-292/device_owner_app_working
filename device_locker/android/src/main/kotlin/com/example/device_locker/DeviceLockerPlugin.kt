@@ -24,18 +24,24 @@ class DeviceLockerPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     private lateinit var compName: ComponentName
     private lateinit var keyguardManager: KeyguardManager
 
-    override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        context = flutterPluginBinding.applicationContext
-        channel = MethodChannel(flutterPluginBinding.binaryMessenger, "device_locker")
-        channel.setMethodCallHandler(this)
-        initializeDevicePolicyManager()
-        Log.d("DeviceLockerPlugin", "onAttachedToEngine called")
-    }
+override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
+    context = flutterPluginBinding.applicationContext
+    channel = MethodChannel(flutterPluginBinding.binaryMessenger, "device_locker")
+    channel.setMethodCallHandler(this)
+    initializeDevicePolicyManager()
+    enforceDeviceOwnerPolicies()
+    Log.d("DeviceLockerPlugin", "onAttachedToEngine called")
+}
 
     private fun initializeDevicePolicyManager() {
-        devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        compName = ComponentName(context, MyDeviceAdminReceiver::class.java)
-        keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        try {
+            devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            compName = ComponentName(context, MyDeviceAdminReceiver::class.java)
+            keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+            Log.d("DeviceLockerPlugin", "DevicePolicyManager initialized successfully")
+        } catch (e: Exception) {
+            Log.e("DeviceLockerPlugin", "Failed to initialize DevicePolicyManager: ${e.message}")
+        }
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
@@ -44,9 +50,7 @@ class DeviceLockerPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
         Log.d("DeviceLockerPlugin", "onAttachedToActivity called")
-        devicePolicyManager = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        compName = ComponentName(context, MyDeviceAdminReceiver::class.java)
-        keyguardManager = context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+        initializeDevicePolicyManager()
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
@@ -64,12 +68,12 @@ class DeviceLockerPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "activateDeviceAdmin" -> {
+            "activateDeviceOwner" -> {
                 if (::compName.isInitialized) {
-                    activateDeviceAdmin()
+                    activateDeviceOwner()
                     result.success(null)
                 } else {
-                    activateDeviceAdmin()
+                    Log.e("DeviceLockerPlugin", "ComponentName not initialized")
                     result.error("ERROR", "compName has not been initialized", null)
                 }
             }
@@ -79,6 +83,7 @@ class DeviceLockerPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
                     lockDevice(pin)
                     result.success(null)
                 } else {
+                    Log.e("DeviceLockerPlugin", "PIN is required for lockDevice")
                     result.error("ERROR", "PIN is required", null)
                 }
             }
@@ -90,38 +95,57 @@ class DeviceLockerPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
     }
 
-    private fun activateDeviceAdmin() {
-        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
-        intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, compName)
-        intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Please enable device admin to use lock/unlock features.")
-        context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    }
-
-    private fun lockDevice(pin: String) {
-        Log.d("DeviceLockerPlugin", "Locking device with pin: $pin")
-        if (isDeviceOwner()) {
-            try {
-                var token = getToken()
-                if (token.isEmpty()) {
-                    token = generateAndSaveToken()
-                }
-                if (!devicePolicyManager.isResetPasswordTokenActive(compName)) {
-                    activateToken(token)
-                }
-                if (devicePolicyManager.isResetPasswordTokenActive(compName)) {
-                    resetPasswordWithToken(pin, token)
-                    devicePolicyManager.lockNow()
-                    Log.d("DeviceLockerPlugin", "Device locked successfully")
-                } else {
-                    Log.e("DeviceLockerPlugin", "Token activation failed")
-                }
-            } catch (e: SecurityException) {
-                Log.e("DeviceLockerPlugin", "Failed to lock device: ${e.message}")
-            }
-        } else {
-            Log.e("DeviceLockerPlugin", "This app is not the device owner")
+    private fun activateDeviceOwner() {
+        try {
+            val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+            intent.putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, compName)
+            intent.putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, "Please enable device owner to use lock/unlock features.")
+            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            Log.d("DeviceLockerPlugin", "Device owner activation started")
+        } catch (e: Exception) {
+            Log.e("DeviceLockerPlugin", "Failed to activate device owner: ${e.message}")
         }
     }
+
+private fun lockDevice(pin: String) {
+    Log.d("DeviceLockerPlugin", "Locking device with pin: $pin")
+    if (isDeviceOwner()) {
+        try {
+            var token = getToken()
+            if (token.isEmpty()) {
+                Log.d("DeviceLockerPlugin", "Token is empty. Generating and saving a new token.")
+                token = generateAndSaveToken()
+            } else {
+                Log.d("DeviceLockerPlugin", "Token retrieved: ${Base64.encodeToString(token, Base64.DEFAULT)}")
+            }
+
+            if (!devicePolicyManager.isResetPasswordTokenActive(compName)) {
+                Log.d("DeviceLockerPlugin", "Activating token.")
+                activateToken(token)
+            }
+
+            if (devicePolicyManager.isResetPasswordTokenActive(compName)) {
+                Log.d("DeviceLockerPlugin", "Token is active. Resetting password with token.")
+                val result = resetPasswordWithToken(pin, token)
+                if (result) {
+                    devicePolicyManager.lockNow()
+                    Log.d("DeviceLockerPlugin", "Device locked successfully.")
+                } else {
+                    Log.e("DeviceLockerPlugin", "Failed to reset password with token: ${Base64.encodeToString(token, Base64.DEFAULT)}")
+                }
+            } else {
+                Log.e("DeviceLockerPlugin", "Token activation failed.")
+            }
+        } catch (e: SecurityException) {
+            Log.e("DeviceLockerPlugin", "Failed to lock device due to SecurityException: ${e.message}")
+        } catch (e: Exception) {
+            Log.e("DeviceLockerPlugin", "Unexpected error during lockDevice: ${e.message}")
+        }
+    } else {
+        Log.e("DeviceLockerPlugin", "This app is not the device owner.")
+    }
+}
+
 
     private fun unlockDevice() {
         Log.d("DeviceLockerPlugin", "Unlocking device")
@@ -152,20 +176,23 @@ class DeviceLockerPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         }
     }
 
-    private fun resetPasswordWithToken(newPassword: String, token: ByteArray) {
-        try {
-            val result = devicePolicyManager.resetPasswordWithToken(compName, newPassword, token, 0)
-            if (result) {
-                Log.d("DeviceLockerPlugin", "Password reset successfully")
-            } else {
-                Log.e("DeviceLockerPlugin", "Password reset failed")
-            }
-        } catch (e: IllegalStateException) {
-            Log.e("DeviceLockerPlugin", "Token mismatch: ${e.message}")
-        } catch (e: SecurityException) {
-            Log.e("DeviceLockerPlugin", "Security exception: ${e.message}")
+private fun resetPasswordWithToken(newPassword: String, token: ByteArray): Boolean {
+    return try {
+        val result = devicePolicyManager.resetPasswordWithToken(compName, newPassword, token, 0)
+        if (result) {
+            Log.d("DeviceLockerPlugin", "Password reset successfully")
+        } else {
+            Log.e("DeviceLockerPlugin", "Password reset failed")
         }
+        result
+    } catch (e: IllegalStateException) {
+        Log.e("DeviceLockerPlugin", "Token mismatch: ${e.message}")
+        false
+    } catch (e: SecurityException) {
+        Log.e("DeviceLockerPlugin", "Security exception: ${e.message}")
+        false
     }
+}
 
     private fun generateAndSaveToken(): ByteArray {
         val token = ByteArray(32)
@@ -173,6 +200,9 @@ class DeviceLockerPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         val success = devicePolicyManager.setResetPasswordToken(compName, token)
         if (success) {
             saveToken(Base64.encodeToString(token, Base64.DEFAULT))
+            Log.d("DeviceLockerPlugin", "Token generated and saved")
+        } else {
+            Log.e("DeviceLockerPlugin", "Failed to generate or save token")
         }
         return token
     }
@@ -205,15 +235,51 @@ class DeviceLockerPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         return if (tokenString != null) {
             Base64.decode(tokenString, Base64.DEFAULT)
         } else {
+            Log.e("DeviceLockerPlugin", "No token found in SharedPreferences")
             ByteArray(0)
         }
     }
 
     private fun isDeviceOwner(): Boolean {
-        return devicePolicyManager.isDeviceOwnerApp(context.packageName)
+        val isOwner = devicePolicyManager.isDeviceOwnerApp(context.packageName)
+        Log.d("DeviceLockerPlugin", "isDeviceOwner: $isOwner")
+        return isOwner
     }
 
     private fun isLockScreenPasswordSet(): Boolean {
-        return keyguardManager.isKeyguardSecure
+        val isPasswordSet = keyguardManager.isKeyguardSecure
+        Log.d("DeviceLockerPlugin", "isLockScreenPasswordSet: $isPasswordSet")
+        return isPasswordSet
+    }
+
+    private fun enforceDeviceOwnerPolicies() {
+        Log.d("DeviceLockerPlugin", "Enforcing device owner policies")
+        if (isDeviceOwner()) {
+            // Disallow factory reset
+            devicePolicyManager.addUserRestriction(compName, android.os.UserManager.DISALLOW_FACTORY_RESET)
+
+            // Block uninstall of the app
+            devicePolicyManager.setUninstallBlocked(compName, context.packageName, true)
+
+            // Enforce password policies
+            devicePolicyManager.setPasswordQuality(compName, DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED)
+            devicePolicyManager.setPasswordMinimumLength(compName, 0)
+
+            // Disable safe boot
+            devicePolicyManager.addUserRestriction(compName, android.os.UserManager.DISALLOW_SAFE_BOOT)
+
+            // Disable adding new accounts
+            devicePolicyManager.addUserRestriction(compName, android.os.UserManager.DISALLOW_ADD_USER)
+
+            // Block installation from unknown sources
+            devicePolicyManager.addUserRestriction(compName, android.os.UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES)
+
+            // Disable USB file transfer
+            devicePolicyManager.addUserRestriction(compName, android.os.UserManager.DISALLOW_USB_FILE_TRANSFER)
+
+            Log.d("DeviceLockerPlugin", "Policies enforced successfully")
+        } else {
+            Log.e("DeviceLockerPlugin", "This app is not the device owner")
+        }
     }
 }
