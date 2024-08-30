@@ -21,7 +21,7 @@
     <!-- Application Definition -->
     <application
         android:name=".MyApp"
-        android:label="Device Owner App"
+        android:label="Device Owner"
         android:icon="@mipmap/ic_launcher">
 
         <!-- Main Activity -->
